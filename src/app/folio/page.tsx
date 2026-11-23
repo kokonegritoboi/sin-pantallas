@@ -4,7 +4,12 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Award, ArrowLeft, Search, CheckCircle2, AlertTriangle } from "lucide-react";
-import { supabase, SesionSinPantallas } from "@/lib/supabase";
+import {
+  supabase,
+  SesionSinPantallas,
+  getLocalSession,
+  getLocalSessionByFolio,
+} from "@/lib/supabase";
 
 function formatTime(totalSeconds: number) {
   const mins = Math.floor(totalSeconds / 60);
@@ -21,10 +26,19 @@ function FolioContent() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!idParam || !supabase) {
+    if (!idParam) {
       setLoading(false);
       return;
     }
+
+    if (!supabase || idParam.startsWith("loc-")) {
+      const local = getLocalSession(idParam);
+      if (local) setSesion(local);
+      else setError("No encontramos ese registro local.");
+      setLoading(false);
+      return;
+    }
+
     supabase
       .from("sesiones_sin_pantallas")
       .select("*")
@@ -42,9 +56,21 @@ function FolioContent() {
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
-    if (!supabase || !folioQuery.trim()) return;
+    if (!folioQuery.trim()) return;
     setLoading(true);
     setError("");
+
+    if (!supabase) {
+      const local = getLocalSessionByFolio(folioQuery.trim());
+      if (local) setSesion(local);
+      else {
+        setSesion(null);
+        setError("No existe un folio local con ese código.");
+      }
+      setLoading(false);
+      return;
+    }
+
     const { data, error: err } = await supabase
       .from("sesiones_sin_pantallas")
       .select("*")
@@ -104,7 +130,6 @@ function FolioContent() {
 
       {sesion && (
         <div className="space-y-3">
-          {/* Acid-Lime Folio Hero */}
           <section className="rounded-[28px] bg-[#C9F72D] p-6 text-[#0b0d10]">
             <div className="flex items-start justify-between">
               <div>
@@ -124,7 +149,6 @@ function FolioContent() {
             </p>
           </section>
 
-          {/* Bento Metrics */}
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-[24px] bg-[#C9F2E3] p-5 text-[#0b0d10]">
               <p className="text-[11px] font-bold uppercase opacity-70">Tiempo activo</p>

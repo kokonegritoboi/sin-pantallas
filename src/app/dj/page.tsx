@@ -11,7 +11,12 @@ import {
   Unlock,
   Users,
 } from "lucide-react";
-import { supabase, SesionSinPantallas } from "@/lib/supabase";
+import {
+  supabase,
+  SesionSinPantallas,
+  listLocalSessions,
+  updateLocalSession,
+} from "@/lib/supabase";
 import { ICE_SERVERS, SignalMessage } from "@/lib/webrtc";
 
 export default function DjPanelPage() {
@@ -40,7 +45,10 @@ export default function DjPanelPage() {
   }
 
   async function fetchSesiones() {
-    if (!supabase) return;
+    if (!supabase) {
+      setSesiones(listLocalSessions());
+      return;
+    }
     const { data } = await supabase
       .from("sesiones_sin_pantallas")
       .select("*")
@@ -72,7 +80,7 @@ export default function DjPanelPage() {
 
   async function startBroadcast() {
     if (!supabase) {
-      setError("Configura las variables de Supabase antes de transmitir.");
+      setError("Modo local activo: agrega tus llaves de Supabase en Vercel para transmitir audio a otros teléfonos.");
       return;
     }
     setError("");
@@ -190,7 +198,11 @@ export default function DjPanelPage() {
   }
 
   async function handleReactivate(id: string) {
-    if (!supabase) return;
+    if (!supabase || id.startsWith("loc-")) {
+      updateLocalSession(id, { estado: "activo" });
+      fetchSesiones();
+      return;
+    }
     await supabase
       .from("sesiones_sin_pantallas")
       .update({ estado: "activo", updated_at: new Date().toISOString() })
@@ -346,7 +358,7 @@ export default function DjPanelPage() {
           ))}
           {sesiones.length === 0 && (
             <p className="rounded-[22px] border border-white/10 bg-[#14171D] p-4 text-center text-xs text-zinc-500">
-              Aún no hay asistentes registrados en Supabase.
+              Aún no hay asistentes registrados.
             </p>
           )}
         </div>

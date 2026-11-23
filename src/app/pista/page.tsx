@@ -14,7 +14,12 @@ import {
   ArrowUpRight,
   Check,
 } from "lucide-react";
-import { supabase, SesionSinPantallas } from "@/lib/supabase";
+import {
+  supabase,
+  SesionSinPantallas,
+  getLocalSession,
+  updateLocalSession,
+} from "@/lib/supabase";
 import { ICE_SERVERS, SignalMessage } from "@/lib/webrtc";
 
 function formatClock(totalSeconds: number) {
@@ -105,7 +110,17 @@ function PistaContent() {
   }, []);
 
   useEffect(() => {
-    if (!sessionId || !supabase) {
+    if (!sessionId) {
+      setLoading(false);
+      return;
+    }
+
+    if (!supabase || sessionId.startsWith("loc-")) {
+      const local = getLocalSession(sessionId);
+      if (local) {
+        setSesion(local);
+        setSeconds(local.tiempo_activo_seg);
+      }
       setLoading(false);
       return;
     }
@@ -159,12 +174,16 @@ function PistaContent() {
     const timer = setInterval(() => {
       setSeconds((prev) => {
         const next = prev + 1;
-        if (next % 5 === 0 && supabase) {
-          supabase
-            .from("sesiones_sin_pantallas")
-            .update({ tiempo_activo_seg: next, updated_at: new Date().toISOString() })
-            .eq("id", sesion.id)
-            .then(() => {});
+        if (next % 5 === 0) {
+          if (supabase && !sesion.id.startsWith("loc-")) {
+            supabase
+              .from("sesiones_sin_pantallas")
+              .update({ tiempo_activo_seg: next, updated_at: new Date().toISOString() })
+              .eq("id", sesion.id)
+              .then(() => {});
+          } else {
+            updateLocalSession(sesion.id, { tiempo_activo_seg: next });
+          }
         }
         return next;
       });
@@ -186,7 +205,7 @@ function PistaContent() {
           prev ? { ...prev, estado: "bloqueado", faltas: nuevasFaltas } : prev
         );
 
-        if (supabase) {
+        if (supabase && !sesion.id.startsWith("loc-")) {
           await supabase
             .from("sesiones_sin_pantallas")
             .update({
@@ -196,6 +215,12 @@ function PistaContent() {
               updated_at: new Date().toISOString(),
             })
             .eq("id", sesion.id);
+        } else {
+          updateLocalSession(sesion.id, {
+            estado: "bloqueado",
+            faltas: nuevasFaltas,
+            tiempo_activo_seg: seconds,
+          });
         }
       }
     };
@@ -206,9 +231,11 @@ function PistaContent() {
 
   useEffect(() => {
     if (!audioUnlocked || !sesion || sesion.canal === "CANAL-BACKUP" || !supabase) {
-      if (audioUnlocked && sesion?.canal === "CANAL-BACKUP" && sesion.estado === "activo") {
-        setDjStatus("backup");
-        if (!muted) startBackupBeat();
+      if (audioUnlocked && sesion && sesion.estado === "activo") {
+        if (sesion.canal === "CANAL-BACKUP" || !supabase) {
+          setDjStatus("backup");
+          if (!muted) startBackupBeat();
+        }
       }
       return;
     }
@@ -327,26 +354,37 @@ function PistaContent() {
 
   async function handleLocalPinUnlock(e: React.FormEvent) {
     e.preventDefault();
-    if (pinInput.trim() !== "2026" || !sesion || !supabase) return;
-    await supabase
-      .from("sesiones_sin_pantallas")
-      .update({ estado: "activo", updated_at: new Date().toISOString() })
-      .eq("id", sesion.id);
+    if (pinInput.trim() !== "2026" || !sesion) return;
+
+    if (supabase && !sesion.id.startsWith("loc-")) {
+      await supabase
+        .from("sesiones_sin_pantallas")
+        .update({ estado: "activo", updated_at: new Date().toISOString() })
+        .eq("id", sesion.id);
+    } else {
+      const updated = updateLocalSession(sesion.id, { estado: "activo" });
+      if (updated) setSesion(updated);
+      if (djStatus === "backup" && !muted) startBackupBeat();
+    }
     setPinInput("");
   }
 
   async function handleFinish() {
     stopBackupBeat();
     wakeLockRef.current?.release().catch(() => {});
-    if (sesion && supabase) {
-      await supabase
-        .from("sesiones_sin_pantallas")
-        .update({
-          estado: "finalizado",
-          tiempo_activo_seg: seconds,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", sesion.id);
+    if (sesion) {
+      if (supabase && !sesion.id.startsWith("loc-")) {
+        await supabase
+          .from("sesiones_sin_pantallas")
+          .update({
+            estado: "finalizado",
+            tiempo_activo_seg: seconds,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", sesion.id);
+      } else {
+        updateLocalSession(sesion.id, { estado: "finalizado", tiempo_activo_seg: seconds });
+      }
       router.push(`/folio?id=${sesion.id}`);
     } else {
       router.push("/");
@@ -372,14 +410,12 @@ function PistaContent() {
     );
   }
 
-  // Matriz visual estilo 51273.jpg (24 bloques de 15s = 6 minutos)
   const litDots = Math.min(24, Math.floor(seconds / 15));
 
   return (
     <div className="flex flex-1 flex-col justify-between gap-4">
       <audio ref={audioRef} autoPlay playsInline className="hidden" />
 
-      {/* Top Bar */}
       <header className="flex items-center justify-between">
         <div className="inline-flex items-center gap-2.5 rounded-full border border-white/10 bg-[#14171D] py-1.5 pl-3 pr-4">
           <span className="h-2.5 w-2.5 rounded-full bg-[#C9F72D]" />
@@ -478,7 +514,6 @@ function PistaContent() {
         </section>
       ) : (
         <div className="flex flex-1 flex-col gap-3">
-          {/* Mint-Ice Timer Card (51271.jpg style) */}
           <section className="rounded-[28px] bg-[#C9F2E3] p-5 text-[#0b0d10]">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider opacity-70">
@@ -497,7 +532,6 @@ function PistaContent() {
             </div>
           </section>
 
-          {/* Acid-Lime Live Audio Card */}
           <section className="rounded-[28px] bg-[#C9F72D] p-5 text-[#0b0d10]">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -529,7 +563,6 @@ function PistaContent() {
             )}
           </section>
 
-          {/* Dark Dot-Matrix Streak Card (51273.jpg style) */}
           <section className="flex-1 rounded-[28px] border border-white/10 bg-[#14171D] p-5">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-xs font-bold text-white">Racha de enfoque</span>
