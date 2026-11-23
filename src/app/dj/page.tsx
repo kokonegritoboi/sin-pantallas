@@ -199,44 +199,44 @@ export default function DjPanelPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-6">
-      <header className="flex items-center justify-between border-b border-zinc-800 pb-4">
+    <div className="flex flex-1 flex-col gap-4">
+      <header className="flex items-center justify-between">
         <Link
           href="/"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-300 hover:text-lime-400"
+          className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#14171D] px-3.5 py-2 text-xs font-semibold text-white hover:border-[#C9F72D]"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-3.5 w-3.5" />
           Check-in
         </Link>
-        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-lime-400">
-          <Disc3 className="h-4 w-4" />
-          Cabina DJ & Organizador
-        </div>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#C9F72D] px-3.5 py-2 text-[11px] font-extrabold uppercase tracking-wider text-[#0b0d10]">
+          <Disc3 className="h-3.5 w-3.5" />
+          Cabina DJ
+        </span>
       </header>
 
-      <section className="space-y-4 rounded-2xl border border-zinc-800 bg-[#121217] p-5">
+      <section className="space-y-4 rounded-[28px] border border-white/10 bg-[#14171D] p-5">
         <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-400">
-            Código del evento a transmitir
+          <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+            Código del evento
           </label>
           <input
             type="text"
             value={codigoEvento}
             onChange={(e) => setCodigoEvento(e.target.value)}
             disabled={isStreaming}
-            className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2.5 text-sm uppercase text-white outline-none focus:border-lime-400 disabled:opacity-60"
+            className="w-full rounded-2xl border border-white/10 bg-[#0b0d10] px-4 py-2.5 text-sm font-bold uppercase text-white outline-none focus:border-[#C9F72D] disabled:opacity-60"
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-400">
+          <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
             Entrada de audio (Micrófono o Interfaz DJ)
           </label>
           <select
             value={selectedDeviceId}
             onChange={(e) => setSelectedDeviceId(e.target.value)}
             disabled={isStreaming}
-            className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2.5 text-xs text-white outline-none focus:border-lime-400"
+            className="w-full rounded-2xl border border-white/10 bg-[#0b0d10] px-4 py-2.5 text-xs font-medium text-white outline-none focus:border-[#C9F72D]"
           >
             {devices.length === 0 ? (
               <option value="">Entrada predeterminada del dispositivo</option>
@@ -251,52 +251,56 @@ export default function DjPanelPage() {
         </div>
 
         {isStreaming && (
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-[11px] text-zinc-400">
-              <span>Nivel de señal en vivo</span>
-              <span className="text-lime-400">{audioLevel}%</span>
+          <div className="space-y-1.5 rounded-2xl bg-[#0b0d10] p-3">
+            <div className="flex justify-between text-[11px] font-semibold text-zinc-400">
+              <span>Señal en vivo</span>
+              <span className="tabular-nums text-[#C9F72D]">{audioLevel}%</span>
             </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-800">
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10">
               <div
-                className="h-full bg-lime-400 transition-all duration-75"
+                className="h-full rounded-full bg-[#C9F72D] transition-all duration-75"
                 style={{ width: `${audioLevel}%` }}
               />
             </div>
           </div>
         )}
 
-        {error && <p className="text-xs text-red-400">{error}</p>}
+        {error && <p className="text-xs font-medium text-[#FF8A75]">{error}</p>}
 
         {!isStreaming ? (
           <button
             onClick={startBroadcast}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-lime-400 px-4 py-3 text-sm font-bold text-zinc-950 transition hover:bg-lime-300"
+            className="flex w-full items-center justify-between rounded-full bg-[#C9F72D] py-2 pl-5 pr-2 text-sm font-extrabold text-[#0b0d10] transition hover:brightness-105"
           >
-            <Mic className="h-4 w-4" />
-            Transmitir audio en vivo
+            <span>Transmitir audio en vivo</span>
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0b0d10] text-[#C9F72D]">
+              <Mic className="h-4 w-4" />
+            </span>
           </button>
         ) : (
           <button
             onClick={stopBroadcast}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/50 bg-red-500/15 px-4 py-3 text-sm font-bold text-red-300 transition hover:bg-red-500/25"
+            className="flex w-full items-center justify-between rounded-full bg-[#FF4D2E] py-2 pl-5 pr-2 text-sm font-extrabold text-white"
           >
-            <MicOff className="h-4 w-4" />
-            Detener transmisión
+            <span>Detener transmisión</span>
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0b0d10] text-[#FF4D2E]">
+              <MicOff className="h-4 w-4" />
+            </span>
           </button>
         )}
       </section>
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="inline-flex items-center gap-2 text-sm font-bold text-white">
-            <Users className="h-4 w-4 text-lime-400" />
-            Asistentes en pista ({sesiones.length})
+        <div className="flex items-center justify-between px-1">
+          <h2 className="inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-white">
+            <Users className="h-4 w-4 text-[#C9F72D]" />
+            En pista ({sesiones.length})
           </h2>
           <button
             onClick={fetchSesiones}
-            className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
+            className="inline-flex items-center gap-1 rounded-full bg-[#14171D] px-3 py-1 text-[11px] font-semibold text-zinc-300 hover:text-white"
           >
-            <RefreshCw className="h-3.5 w-3.5" />
+            <RefreshCw className="h-3 w-3" />
             Actualizar
           </button>
         </div>
@@ -305,21 +309,22 @@ export default function DjPanelPage() {
           {sesiones.map((s) => (
             <div
               key={s.id}
-              className="flex items-center justify-between rounded-xl border border-zinc-800 bg-[#121217] px-4 py-3"
+              className="flex items-center justify-between rounded-[22px] border border-white/10 bg-[#14171D] px-4 py-3"
             >
               <div>
-                <p className="text-sm font-semibold text-white">
+                <p className="text-sm font-bold text-white">
                   {s.alias}{" "}
-                  <span className="font-mono text-xs text-zinc-500">({s.folio})</span>
+                  <span className="font-mono text-xs font-medium text-zinc-500">
+                    {s.folio}
+                  </span>
                 </p>
                 <p className="text-xs text-zinc-400">
-                  Estado:{" "}
                   <span
                     className={
                       s.estado === "activo"
-                        ? "text-lime-400"
+                        ? "font-bold text-[#C9F72D]"
                         : s.estado === "bloqueado"
-                        ? "text-red-400"
+                        ? "font-bold text-[#FF4D2E]"
                         : "text-zinc-300"
                     }
                   >
@@ -331,7 +336,7 @@ export default function DjPanelPage() {
               {s.estado === "bloqueado" && (
                 <button
                   onClick={() => handleReactivate(s.id)}
-                  className="inline-flex items-center gap-1 rounded-lg bg-lime-400 px-3 py-1.5 text-xs font-bold text-zinc-950 hover:bg-lime-300"
+                  className="inline-flex items-center gap-1 rounded-full bg-[#C9F72D] px-3.5 py-1.5 text-xs font-extrabold text-[#0b0d10]"
                 >
                   <Unlock className="h-3.5 w-3.5" />
                   Reactivar
@@ -340,7 +345,7 @@ export default function DjPanelPage() {
             </div>
           ))}
           {sesiones.length === 0 && (
-            <p className="rounded-xl border border-zinc-900 p-4 text-center text-xs text-zinc-500">
+            <p className="rounded-[22px] border border-white/10 bg-[#14171D] p-4 text-center text-xs text-zinc-500">
               Aún no hay asistentes registrados en Supabase.
             </p>
           )}

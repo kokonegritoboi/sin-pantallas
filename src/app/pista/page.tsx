@@ -10,8 +10,9 @@ import {
   Volume2,
   VolumeX,
   LogOut,
-  ShieldCheck,
   ArrowLeft,
+  ArrowUpRight,
+  Check,
 } from "lucide-react";
 import { supabase, SesionSinPantallas } from "@/lib/supabase";
 import { ICE_SERVERS, SignalMessage } from "@/lib/webrtc";
@@ -19,7 +20,7 @@ import { ICE_SERVERS, SignalMessage } from "@/lib/webrtc";
 function formatClock(totalSeconds: number) {
   const mins = Math.floor(totalSeconds / 60);
   const secs = totalSeconds % 60;
-  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  return `${String(mins).padStart(2, "0")} : ${String(secs).padStart(2, "0")}`;
 }
 
 function PistaContent() {
@@ -58,7 +59,8 @@ function PistaContent() {
   const startBackupBeat = useCallback(() => {
     if (backupIntervalRef.current) return;
     const AudioContextClass =
-      window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextClass) return;
 
     const ctx = new AudioContextClass();
@@ -361,7 +363,7 @@ function PistaContent() {
         <p className="text-sm text-zinc-300">No hay una sesión activa registrada.</p>
         <Link
           href="/"
-          className="inline-flex items-center gap-2 rounded-xl bg-lime-400 px-4 py-2.5 text-sm font-bold text-zinc-950"
+          className="inline-flex items-center gap-2 rounded-full bg-[#C9F72D] px-5 py-3 text-sm font-extrabold text-[#0b0d10]"
         >
           <ArrowLeft className="h-4 w-4" />
           Ir al Check-in
@@ -370,102 +372,149 @@ function PistaContent() {
     );
   }
 
+  // Matriz visual estilo 51273.jpg (24 bloques de 15s = 6 minutos)
+  const litDots = Math.min(24, Math.floor(seconds / 15));
+
   return (
-    <div className="flex flex-1 flex-col justify-between gap-6">
+    <div className="flex flex-1 flex-col justify-between gap-4">
       <audio ref={audioRef} autoPlay playsInline className="hidden" />
 
-      <header className="flex items-center justify-between border-b border-zinc-800 pb-4">
-        <div>
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-lime-400">
-            {sesion.codigo_evento} · {sesion.folio}
-          </span>
-          <h1 className="text-base font-bold text-white">Hola, {sesion.alias}</h1>
+      {/* Top Bar */}
+      <header className="flex items-center justify-between">
+        <div className="inline-flex items-center gap-2.5 rounded-full border border-white/10 bg-[#14171D] py-1.5 pl-3 pr-4">
+          <span className="h-2.5 w-2.5 rounded-full bg-[#C9F72D]" />
+          <div>
+            <p className="text-xs font-extrabold text-white">{sesion.alias}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+              {sesion.folio} · {sesion.codigo_evento}
+            </p>
+          </div>
         </div>
+
         <button
           onClick={toggleMute}
-          className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-200 hover:border-lime-400"
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-[#14171D] text-white transition hover:border-[#C9F72D]"
           aria-label="Silenciar"
         >
-          {muted ? <VolumeX className="h-5 w-5 text-red-400" /> : <Volume2 className="h-5 w-5 text-lime-400" />}
+          {muted ? (
+            <VolumeX className="h-4 w-4 text-[#FF4D2E]" />
+          ) : (
+            <Volume2 className="h-4 w-4 text-[#C9F72D]" />
+          )}
         </button>
       </header>
 
       {sesion.estado === "bloqueado" ? (
-        <section className="flex flex-1 flex-col items-center justify-center gap-5 rounded-2xl border border-red-500/50 bg-red-950/20 p-6 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500/20 text-red-400">
-            <Lock className="h-8 w-8" />
+        <section className="flex flex-1 flex-col justify-between rounded-[28px] bg-[#FF4D2E] p-6 text-[#0b0d10]">
+          <div className="flex items-center justify-between">
+            <span className="rounded-full bg-[#0b0d10] px-3 py-1 text-[11px] font-bold uppercase text-[#FF4D2E]">
+              Sesión pausada
+            </span>
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0b0d10] text-[#FF4D2E]">
+              <Lock className="h-5 w-5" />
+            </span>
           </div>
-          <div>
-            <h2 className="text-xl font-bold text-white">Saliste de la pista</h2>
-            <p className="mt-2 text-sm text-zinc-300">
-              Detectamos que cambiaste de aplicación o minimizaste la pantalla. La música se
-              pausó y sumaste una falta ({sesion.faltas}).
+
+          <div className="my-6">
+            <h2 className="text-3xl font-extrabold leading-tight">Saliste de la pista.</h2>
+            <p className="mt-2 text-sm font-medium text-[#0b0d10]/85">
+              Cambiaste de app o minimizaste la pantalla. La música se detuvo y acumulaste{" "}
+              <strong>{sesion.faltas} falta(s)</strong>.
             </p>
           </div>
-          <p className="rounded-xl border border-zinc-800 bg-zinc-900/90 px-4 py-2.5 text-xs text-zinc-300">
-            Pide al organizador que te reactive desde la Cabina DJ o ingresa el PIN de evento:
-          </p>
-          <form onSubmit={handleLocalPinUnlock} className="flex w-full max-w-xs gap-2">
-            <input
-              type="password"
-              inputMode="numeric"
-              placeholder="PIN (2026)"
-              value={pinInput}
-              onChange={(e) => setPinInput(e.target.value)}
-              className="flex-1 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-center text-sm text-white outline-none focus:border-lime-400"
-            />
-            <button
-              type="submit"
-              className="rounded-xl bg-lime-400 px-4 py-2 text-xs font-bold text-zinc-950"
-            >
-              Reactivar
-            </button>
-          </form>
+
+          <div className="space-y-3 rounded-[22px] bg-[#0b0d10] p-4 text-white">
+            <p className="text-xs text-zinc-300">
+              Pide al organizador que te reactive desde la Cabina DJ o ingresa el PIN:
+            </p>
+            <form onSubmit={handleLocalPinUnlock} className="flex gap-2">
+              <input
+                type="password"
+                inputMode="numeric"
+                placeholder="PIN (2026)"
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value)}
+                className="flex-1 rounded-full border border-white/15 bg-[#14171D] px-4 py-2 text-center text-sm font-bold text-white outline-none focus:border-[#C9F72D]"
+              />
+              <button
+                type="submit"
+                className="rounded-full bg-[#C9F72D] px-5 py-2 text-xs font-extrabold text-[#0b0d10]"
+              >
+                Reactivar
+              </button>
+            </form>
+          </div>
         </section>
       ) : !audioUnlocked ? (
-        <section className="flex flex-1 flex-col items-center justify-center gap-6 rounded-2xl border border-zinc-800 bg-[#121217] p-6 text-center">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full border border-lime-400/40 bg-lime-400/10 text-lime-400">
-            <Headphones className="h-10 w-10" />
+        <section className="flex flex-1 flex-col justify-between rounded-[28px] bg-[#C9F2E3] p-6 text-[#0b0d10]">
+          <div className="flex items-center justify-between">
+            <span className="rounded-full bg-[#0b0d10] px-3 py-1 text-[11px] font-bold uppercase text-[#C9F2E3]">
+              Paso 2 de 3
+            </span>
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0b0d10] text-[#C9F72D]">
+              <Headphones className="h-5 w-5" />
+            </span>
           </div>
-          <div>
-            <h2 className="text-xl font-bold text-white">Ponte tus audífonos</h2>
-            <p className="mt-2 text-sm text-zinc-400">
-              Toca el botón para habilitar el audio en tu teléfono y comenzar a sumar tiempo sin
-              pantallas.
+
+          <div className="my-8">
+            <h2 className="text-3xl font-extrabold leading-tight">
+              Ponte tus audífonos y entra.
+            </h2>
+            <p className="mt-2.5 text-sm font-medium text-[#0b0d10]/75">
+              Toca el botón inferior para desbloquear el audio en tu teléfono y comenzar a sumar
+              tiempo sin pantallas.
             </p>
           </div>
+
           <button
             onClick={handleUnlockAudio}
-            className="w-full rounded-xl bg-lime-400 px-5 py-4 text-sm font-bold text-zinc-950 transition hover:bg-lime-300"
+            className="flex w-full items-center justify-between rounded-full bg-[#0b0d10] py-2 pl-5 pr-2 text-sm font-extrabold text-[#C9F72D] transition hover:opacity-90"
           >
-            Conectar audífonos y empezar
+            <span>Conectar audífonos</span>
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#C9F72D] text-[#0b0d10]">
+              <ArrowUpRight className="h-4 w-4" />
+            </span>
           </button>
         </section>
       ) : (
-        <section className="flex flex-1 flex-col items-center justify-center gap-6 rounded-2xl border border-lime-400/30 bg-[#121217] p-6 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-lime-400/30 bg-lime-400/10 px-3.5 py-1.5 text-xs font-semibold text-lime-400">
-            <ShieldCheck className="h-4 w-4" />
-            Modo Sin Pantallas Activo
-          </div>
-
-          <div>
-            <p className="text-xs uppercase tracking-widest text-zinc-400">Tiempo en pista</p>
-            <p className="mt-1 font-mono text-6xl font-black tracking-tight text-white">
-              {formatClock(seconds)}
-            </p>
-          </div>
-
-          <div className="w-full rounded-xl border border-zinc-800 bg-zinc-900/70 p-3.5 text-xs text-zinc-300">
-            <div className="flex items-center justify-center gap-2">
-              <Radio className="h-4 w-4 text-lime-400" />
-              <span>
-                {djStatus === "conectado"
-                  ? "Recibiendo audio del DJ en vivo"
-                  : djStatus === "backup"
-                  ? "Reproduciendo Canal Backup (beat local)"
-                  : "Esperando señal del DJ en vivo..."}
+        <div className="flex flex-1 flex-col gap-3">
+          {/* Mint-Ice Timer Card (51271.jpg style) */}
+          <section className="rounded-[28px] bg-[#C9F2E3] p-5 text-[#0b0d10]">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider opacity-70">
+                Tiempo sin pantallas
+              </span>
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#0b0d10] text-[#C9F72D]">
+                <Check className="h-3.5 w-3.5 stroke-[3]" />
               </span>
             </div>
+            <p className="tabular-nums text-5xl font-extrabold tracking-tight">
+              {formatClock(seconds)}
+            </p>
+            <div className="mt-1 flex gap-16 text-[10px] font-bold uppercase tracking-widest opacity-60">
+              <span>MIN</span>
+              <span>SEG</span>
+            </div>
+          </section>
+
+          {/* Acid-Lime Live Audio Card */}
+          <section className="rounded-[28px] bg-[#C9F72D] p-5 text-[#0b0d10]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Radio className="h-4 w-4 stroke-[2.5]" />
+                <span className="text-xs font-extrabold uppercase tracking-wider">
+                  {djStatus === "conectado"
+                    ? "DJ en vivo conectado"
+                    : djStatus === "backup"
+                    ? "Canal Backup activo"
+                    : "Esperando señal del DJ"}
+                </span>
+              </div>
+              <span className="rounded-full bg-[#0b0d10] px-2.5 py-0.5 text-[10px] font-bold text-[#C9F72D]">
+                {sesion.faltas} FALTAS
+              </span>
+            </div>
+
             {djStatus === "esperando" && (
               <button
                 type="button"
@@ -473,26 +522,44 @@ function PistaContent() {
                   setDjStatus("backup");
                   if (!muted) startBackupBeat();
                 }}
-                className="mt-2.5 text-[11px] font-semibold text-lime-400 underline underline-offset-4"
+                className="mt-3 rounded-full bg-[#0b0d10] px-4 py-2 text-xs font-bold text-[#C9F72D]"
               >
                 Activar beat de respaldo mientras entra el DJ
               </button>
             )}
-          </div>
+          </section>
 
-          <p className="text-xs text-zinc-500">
-            Faltas registradas: <strong className="text-zinc-300">{sesion.faltas}</strong>
-          </p>
-        </section>
+          {/* Dark Dot-Matrix Streak Card (51273.jpg style) */}
+          <section className="flex-1 rounded-[28px] border border-white/10 bg-[#14171D] p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-xs font-bold text-white">Racha de enfoque</span>
+              <span className="text-[11px] font-semibold text-zinc-400">
+                {litDots}/24 bloques
+              </span>
+            </div>
+            <div className="grid grid-cols-8 gap-2">
+              {Array.from({ length: 24 }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`aspect-square rounded-lg transition-colors ${
+                    i < litDots ? "bg-[#C9F72D]" : "bg-white/10"
+                  }`}
+                />
+              ))}
+            </div>
+          </section>
+        </div>
       )}
 
-      <footer className="flex flex-col gap-2">
+      <footer>
         <button
           onClick={handleFinish}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm font-semibold text-zinc-200 transition hover:border-lime-400 hover:text-lime-400"
+          className="flex w-full items-center justify-between rounded-full border border-white/15 bg-[#14171D] py-2 pl-5 pr-2 text-xs font-bold text-white transition hover:border-[#C9F72D]"
         >
-          <LogOut className="h-4 w-4" />
-          Terminar sesión y ver mi folio
+          <span>Terminar sesión y ver mi folio</span>
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white">
+            <LogOut className="h-4 w-4" />
+          </span>
         </button>
       </footer>
     </div>

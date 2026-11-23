@@ -63,16 +63,16 @@ function FolioContent() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-6">
-      <header className="flex items-center justify-between border-b border-zinc-800 pb-4">
+    <div className="flex flex-1 flex-col gap-4">
+      <header className="flex items-center justify-between">
         <Link
           href="/"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-300 hover:text-lime-400"
+          className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#14171D] px-3.5 py-2 text-xs font-semibold text-white hover:border-[#C9F72D]"
         >
-          <ArrowLeft className="h-4 w-4" />
-          Volver al inicio
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Inicio
         </Link>
-        <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+        <span className="rounded-full bg-[#14171D] px-3.5 py-2 text-[11px] font-bold uppercase tracking-wider text-zinc-400">
           Comprobante
         </span>
       </header>
@@ -83,11 +83,11 @@ function FolioContent() {
           placeholder="Buscar folio (ej. SP-4821)"
           value={folioQuery}
           onChange={(e) => setFolioQuery(e.target.value)}
-          className="flex-1 rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2.5 text-sm uppercase text-white placeholder-zinc-500 outline-none focus:border-lime-400"
+          className="flex-1 rounded-full border border-white/10 bg-[#14171D] px-4 py-2.5 text-sm font-medium uppercase text-white placeholder-zinc-500 outline-none focus:border-[#C9F72D]"
         />
         <button
           type="submit"
-          className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-xs font-semibold text-white hover:border-lime-400"
+          className="inline-flex items-center gap-1.5 rounded-full bg-[#C9F72D] px-4 py-2.5 text-xs font-extrabold text-[#0b0d10]"
         >
           <Search className="h-3.5 w-3.5" />
           Buscar
@@ -97,62 +97,62 @@ function FolioContent() {
       {loading && <p className="text-sm text-zinc-400">Consultando registro...</p>}
 
       {error && (
-        <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-xs text-red-300">
+        <div className="rounded-2xl bg-[#FF4D2E]/15 p-4 text-xs font-medium text-[#FF8A75]">
           {error}
         </div>
       )}
 
       {sesion && (
-        <section className="rounded-2xl border border-zinc-800 bg-[#121217] p-6">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-zinc-400">Folio de participación</p>
-              <h2 className="text-2xl font-extrabold tracking-tight text-lime-400">
-                {sesion.folio}
-              </h2>
+        <div className="space-y-3">
+          {/* Acid-Lime Folio Hero */}
+          <section className="rounded-[28px] bg-[#C9F72D] p-6 text-[#0b0d10]">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider opacity-75">
+                  Folio de participación
+                </p>
+                <h2 className="mt-1 tabular-nums text-4xl font-extrabold tracking-tight">
+                  {sesion.folio}
+                </h2>
+              </div>
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#0b0d10] text-[#C9F72D]">
+                <Award className="h-5 w-5" />
+              </span>
             </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-lime-400/10 text-lime-400">
-              <Award className="h-6 w-6" />
+            <p className="mt-4 text-sm font-bold">
+              {sesion.alias} · <span className="opacity-75">{sesion.codigo_evento}</span>
+            </p>
+          </section>
+
+          {/* Bento Metrics */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-[24px] bg-[#C9F2E3] p-5 text-[#0b0d10]">
+              <p className="text-[11px] font-bold uppercase opacity-70">Tiempo activo</p>
+              <p className="mt-1 tabular-nums text-3xl font-extrabold">
+                {formatTime(sesion.tiempo_activo_seg)}
+              </p>
+            </div>
+            <div className="rounded-[24px] border border-white/10 bg-[#14171D] p-5 text-white">
+              <p className="text-[11px] font-bold uppercase text-zinc-400">Faltas</p>
+              <p className="mt-1 tabular-nums text-3xl font-extrabold">{sesion.faltas}</p>
             </div>
           </div>
 
-          <dl className="space-y-3 border-t border-zinc-800 pt-4 text-sm">
-            <div className="flex justify-between">
-              <dt className="text-zinc-400">Asistente</dt>
-              <dd className="font-semibold text-white">{sesion.alias}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-zinc-400">Evento</dt>
-              <dd className="font-mono text-zinc-200">{sesion.codigo_evento}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-zinc-400">Tiempo sin pantallas</dt>
-              <dd className="font-mono text-lg font-bold text-white">
-                {formatTime(sesion.tiempo_activo_seg)}
-              </dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-zinc-400">Salidas detectadas</dt>
-              <dd className="font-semibold text-white">{sesion.faltas}</dd>
-            </div>
-            <div className="flex items-center justify-between pt-1">
-              <dt className="text-zinc-400">Resultado</dt>
-              <dd>
-                {sesion.faltas === 0 ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-lime-400/15 px-3 py-1 text-xs font-semibold text-lime-400">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    Pista Limpia (Recompensa)
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/15 px-3 py-1 text-xs font-semibold text-amber-300">
-                    <AlertTriangle className="h-3.5 w-3.5" />
-                    Completado con faltas
-                  </span>
-                )}
-              </dd>
-            </div>
-          </dl>
-        </section>
+          <section className="flex items-center justify-between rounded-[24px] border border-white/10 bg-[#14171D] p-5">
+            <span className="text-xs font-semibold text-zinc-400">Resultado</span>
+            {sesion.faltas === 0 ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#C9F72D] px-3.5 py-1.5 text-xs font-extrabold text-[#0b0d10]">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Pista Limpia (Recompensa)
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FF4D2E] px-3.5 py-1.5 text-xs font-extrabold text-white">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Completado con faltas
+              </span>
+            )}
+          </section>
+        </div>
       )}
     </div>
   );

@@ -1,5 +1,11 @@
 import type { Metadata, Viewport } from "next";
+import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
+
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+});
 
 export const metadata: Metadata = {
   title: "Sin Pantallas — Silent Party MVP",
@@ -19,8 +25,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body className="min-h-screen bg-[#09090b] text-zinc-100 antialiased selection:bg-lime-400 selection:text-black">
-        <main className="mx-auto flex min-h-screen max-w-md flex-col px-4 py-6">
+      <body
+        className={`${jakarta.className} min-h-screen bg-[#0b0d10] text-[#f4f6f0] antialiased selection:bg-[#C9F72D] selection:text-[#0b0d10]`}
+      >
+        <main className="mx-auto flex min-h-screen max-w-md flex-col px-4 py-5">
           {children}
         </main>
       </body>
