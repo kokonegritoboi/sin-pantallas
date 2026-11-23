@@ -28,7 +28,7 @@ export default function RootLayout({
       <body
         className={`${jakarta.className} min-h-screen bg-[#0b0d10] text-[#f4f6f0] antialiased selection:bg-[#C9F72D] selection:text-[#0b0d10]`}
       >
-        <main className="mx-auto flex min-h-screen max-w-md flex-col px-4 py-5">
+        <main className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 py-4 md:max-w-3xl md:px-6 md:py-7 lg:max-w-5xl lg:px-8">
           {children}
         </main>
       </body>

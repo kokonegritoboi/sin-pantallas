@@ -452,7 +452,9 @@ function PistaContent() {
           </div>
 
           <div className="my-6">
-            <h2 className="text-3xl font-extrabold leading-tight">Saliste de la pista.</h2>
+            <h2 className="text-3xl font-extrabold leading-tight md:text-4xl">
+              Saliste de la pista.
+            </h2>
             <p className="mt-2 text-sm font-medium text-[#0b0d10]/85">
               Cambiaste de app o minimizaste la pantalla. La música se detuvo y acumulaste{" "}
               <strong>{sesion.faltas} falta(s)</strong>.
@@ -463,7 +465,7 @@ function PistaContent() {
             <p className="text-xs text-zinc-300">
               Pide al organizador que te reactive desde la Cabina DJ o ingresa el PIN:
             </p>
-            <form onSubmit={handleLocalPinUnlock} className="flex gap-2">
+            <form onSubmit={handleLocalPinUnlock} className="flex max-w-sm gap-2">
               <input
                 type="password"
                 inputMode="numeric"
@@ -482,7 +484,7 @@ function PistaContent() {
           </div>
         </section>
       ) : !audioUnlocked ? (
-        <section className="flex flex-1 flex-col justify-between rounded-[28px] bg-[#C9F2E3] p-6 text-[#0b0d10]">
+        <section className="flex flex-1 flex-col justify-between rounded-[28px] bg-[#C9F2E3] p-6 text-[#0b0d10] md:p-8">
           <div className="flex items-center justify-between">
             <span className="rounded-full bg-[#0b0d10] px-3 py-1 text-[11px] font-bold uppercase text-[#C9F2E3]">
               Paso 2 de 3
@@ -492,19 +494,19 @@ function PistaContent() {
             </span>
           </div>
 
-          <div className="my-8">
-            <h2 className="text-3xl font-extrabold leading-tight">
+          <div className="my-8 max-w-lg">
+            <h2 className="text-3xl font-extrabold leading-tight md:text-4xl">
               Ponte tus audífonos y entra.
             </h2>
             <p className="mt-2.5 text-sm font-medium text-[#0b0d10]/75">
-              Toca el botón inferior para desbloquear el audio en tu teléfono y comenzar a sumar
-              tiempo sin pantallas.
+              Toca el botón inferior para desbloquear el audio en tu dispositivo y comenzar a
+              sumar tiempo sin pantallas.
             </p>
           </div>
 
           <button
             onClick={handleUnlockAudio}
-            className="flex w-full items-center justify-between rounded-full bg-[#0b0d10] py-2 pl-5 pr-2 text-sm font-extrabold text-[#C9F72D] transition hover:opacity-90"
+            className="flex w-full max-w-md items-center justify-between rounded-full bg-[#0b0d10] py-2 pl-5 pr-2 text-sm font-extrabold text-[#C9F72D] transition hover:opacity-90"
           >
             <span>Conectar audífonos</span>
             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#C9F72D] text-[#0b0d10]">
@@ -513,73 +515,80 @@ function PistaContent() {
           </button>
         </section>
       ) : (
-        <div className="flex flex-1 flex-col gap-3">
-          <section className="rounded-[28px] bg-[#C9F2E3] p-5 text-[#0b0d10]">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider opacity-70">
-                Tiempo sin pantallas
-              </span>
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#0b0d10] text-[#C9F72D]">
-                <Check className="h-3.5 w-3.5 stroke-[3]" />
-              </span>
-            </div>
-            <p className="tabular-nums text-5xl font-extrabold tracking-tight">
-              {formatClock(seconds)}
-            </p>
-            <div className="mt-1 flex gap-16 text-[10px] font-bold uppercase tracking-widest opacity-60">
-              <span>MIN</span>
-              <span>SEG</span>
-            </div>
-          </section>
-
-          <section className="rounded-[28px] bg-[#C9F72D] p-5 text-[#0b0d10]">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Radio className="h-4 w-4 stroke-[2.5]" />
-                <span className="text-xs font-extrabold uppercase tracking-wider">
-                  {djStatus === "conectado"
-                    ? "DJ en vivo conectado"
-                    : djStatus === "backup"
-                    ? "Canal Backup activo"
-                    : "Esperando señal del DJ"}
+        <div className="grid flex-1 grid-cols-1 gap-3 md:grid-cols-12 md:gap-5">
+          <div className="flex flex-col gap-3 md:col-span-6">
+            <section className="rounded-[28px] bg-[#C9F2E3] p-5 text-[#0b0d10] md:p-6">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider opacity-70">
+                  Tiempo sin pantallas
+                </span>
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#0b0d10] text-[#C9F72D]">
+                  <Check className="h-3.5 w-3.5 stroke-[3]" />
                 </span>
               </div>
-              <span className="rounded-full bg-[#0b0d10] px-2.5 py-0.5 text-[10px] font-bold text-[#C9F72D]">
-                {sesion.faltas} FALTAS
-              </span>
-            </div>
+              <p className="tabular-nums text-5xl font-extrabold tracking-tight md:text-6xl">
+                {formatClock(seconds)}
+              </p>
+              <div className="mt-1 flex gap-16 text-[10px] font-bold uppercase tracking-widest opacity-60">
+                <span>MIN</span>
+                <span>SEG</span>
+              </div>
+            </section>
 
-            {djStatus === "esperando" && (
-              <button
-                type="button"
-                onClick={() => {
-                  setDjStatus("backup");
-                  if (!muted) startBackupBeat();
-                }}
-                className="mt-3 rounded-full bg-[#0b0d10] px-4 py-2 text-xs font-bold text-[#C9F72D]"
-              >
-                Activar beat de respaldo mientras entra el DJ
-              </button>
-            )}
-          </section>
+            <section className="rounded-[28px] bg-[#C9F72D] p-5 text-[#0b0d10]">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Radio className="h-4 w-4 stroke-[2.5]" />
+                  <span className="text-xs font-extrabold uppercase tracking-wider">
+                    {djStatus === "conectado"
+                      ? "DJ en vivo conectado"
+                      : djStatus === "backup"
+                      ? "Canal Backup activo"
+                      : "Esperando señal del DJ"}
+                  </span>
+                </div>
+                <span className="rounded-full bg-[#0b0d10] px-2.5 py-0.5 text-[10px] font-bold text-[#C9F72D]">
+                  {sesion.faltas} FALTAS
+                </span>
+              </div>
 
-          <section className="flex-1 rounded-[28px] border border-white/10 bg-[#14171D] p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-xs font-bold text-white">Racha de enfoque</span>
-              <span className="text-[11px] font-semibold text-zinc-400">
-                {litDots}/24 bloques
-              </span>
+              {djStatus === "esperando" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDjStatus("backup");
+                    if (!muted) startBackupBeat();
+                  }}
+                  className="mt-3 rounded-full bg-[#0b0d10] px-4 py-2 text-xs font-bold text-[#C9F72D]"
+                >
+                  Activar beat de respaldo mientras entra el DJ
+                </button>
+              )}
+            </section>
+          </div>
+
+          <section className="flex flex-col justify-between rounded-[28px] border border-white/10 bg-[#14171D] p-5 md:col-span-6 md:p-6">
+            <div>
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-xs font-bold text-white">Racha de enfoque</span>
+                <span className="text-[11px] font-semibold text-zinc-400">
+                  {litDots}/24 bloques
+                </span>
+              </div>
+              <div className="grid grid-cols-8 gap-2">
+                {Array.from({ length: 24 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={`aspect-square rounded-lg transition-colors ${
+                      i < litDots ? "bg-[#C9F72D]" : "bg-white/10"
+                    }`}
+                  />
+                ))}
+              </div>
             </div>
-            <div className="grid grid-cols-8 gap-2">
-              {Array.from({ length: 24 }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`aspect-square rounded-lg transition-colors ${
-                    i < litDots ? "bg-[#C9F72D]" : "bg-white/10"
-                  }`}
-                />
-              ))}
-            </div>
+            <p className="mt-4 text-xs text-zinc-400">
+              Cada cuadro se ilumina cada 15 segundos continuos sin abandonar esta pantalla.
+            </p>
           </section>
         </div>
       )}

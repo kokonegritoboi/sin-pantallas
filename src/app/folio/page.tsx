@@ -113,7 +113,7 @@ function FolioContent() {
         />
         <button
           type="submit"
-          className="inline-flex items-center gap-1.5 rounded-full bg-[#C9F72D] px-4 py-2.5 text-xs font-extrabold text-[#0b0d10]"
+          className="inline-flex items-center gap-1.5 rounded-full bg-[#C9F72D] px-5 py-2.5 text-xs font-extrabold text-[#0b0d10]"
         >
           <Search className="h-3.5 w-3.5" />
           Buscar
@@ -129,8 +129,8 @@ function FolioContent() {
       )}
 
       {sesion && (
-        <div className="space-y-3">
-          <section className="rounded-[28px] bg-[#C9F72D] p-6 text-[#0b0d10]">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:gap-5">
+          <section className="flex flex-col justify-between rounded-[28px] bg-[#C9F72D] p-6 text-[#0b0d10] md:col-span-6">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-wider opacity-75">
@@ -144,38 +144,40 @@ function FolioContent() {
                 <Award className="h-5 w-5" />
               </span>
             </div>
-            <p className="mt-4 text-sm font-bold">
+            <p className="mt-6 text-sm font-bold">
               {sesion.alias} · <span className="opacity-75">{sesion.codigo_evento}</span>
             </p>
           </section>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-[24px] bg-[#C9F2E3] p-5 text-[#0b0d10]">
-              <p className="text-[11px] font-bold uppercase opacity-70">Tiempo activo</p>
-              <p className="mt-1 tabular-nums text-3xl font-extrabold">
-                {formatTime(sesion.tiempo_activo_seg)}
-              </p>
+          <div className="flex flex-col justify-between gap-3 md:col-span-6">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-[24px] bg-[#C9F2E3] p-5 text-[#0b0d10]">
+                <p className="text-[11px] font-bold uppercase opacity-70">Tiempo activo</p>
+                <p className="mt-1 tabular-nums text-3xl font-extrabold">
+                  {formatTime(sesion.tiempo_activo_seg)}
+                </p>
+              </div>
+              <div className="rounded-[24px] border border-white/10 bg-[#14171D] p-5 text-white">
+                <p className="text-[11px] font-bold uppercase text-zinc-400">Faltas</p>
+                <p className="mt-1 tabular-nums text-3xl font-extrabold">{sesion.faltas}</p>
+              </div>
             </div>
-            <div className="rounded-[24px] border border-white/10 bg-[#14171D] p-5 text-white">
-              <p className="text-[11px] font-bold uppercase text-zinc-400">Faltas</p>
-              <p className="mt-1 tabular-nums text-3xl font-extrabold">{sesion.faltas}</p>
-            </div>
-          </div>
 
-          <section className="flex items-center justify-between rounded-[24px] border border-white/10 bg-[#14171D] p-5">
-            <span className="text-xs font-semibold text-zinc-400">Resultado</span>
-            {sesion.faltas === 0 ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#C9F72D] px-3.5 py-1.5 text-xs font-extrabold text-[#0b0d10]">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Pista Limpia (Recompensa)
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FF4D2E] px-3.5 py-1.5 text-xs font-extrabold text-white">
-                <AlertTriangle className="h-3.5 w-3.5" />
-                Completado con faltas
-              </span>
-            )}
-          </section>
+            <section className="flex items-center justify-between rounded-[24px] border border-white/10 bg-[#14171D] p-5">
+              <span className="text-xs font-semibold text-zinc-400">Resultado</span>
+              {sesion.faltas === 0 ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#C9F72D] px-3.5 py-1.5 text-xs font-extrabold text-[#0b0d10]">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Pista Limpia (Recompensa)
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FF4D2E] px-3.5 py-1.5 text-xs font-extrabold text-white">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Completado con faltas
+                </span>
+              )}
+            </section>
+          </div>
         </div>
       )}
     </div>
