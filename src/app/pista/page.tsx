@@ -358,7 +358,7 @@ function PistaContent() {
 
       const samples = base64Pcm16ToFloat32(pcm16B64);
       const buffer = ctx.createBuffer(1, samples.length, sampleRate);
-      buffer.copyToChannel(samples, 0);
+      buffer.getChannelData(0).set(samples);
 
       const src = ctx.createBufferSource();
       src.buffer = buffer;
