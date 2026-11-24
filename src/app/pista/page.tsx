@@ -165,7 +165,6 @@ function PistaContent() {
     backupIntervalRef.current = setInterval(playStep, 250);
   }, []);
 
-  // Limpieza garantizada si el usuario sale al menú o cierra la vista
   useEffect(() => {
     return () => {
       stopAllAudio();

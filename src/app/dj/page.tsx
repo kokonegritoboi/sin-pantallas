@@ -236,7 +236,6 @@ export default function DjPanelPage() {
         });
         signalChannelRef.current = channel;
 
-        // Nodo de respaldo por Broadcast PCM16 para redes donde WebRTC P2P no logre atravesar NAT
         const processor = ctx.createScriptProcessor(4096, 1, 1);
         const silentGain = ctx.createGain();
         silentGain.gain.value = 0;
