@@ -45,7 +45,7 @@ export default function DjPanelPage() {
   const [sourceMode, setSourceMode] = useState<"mic" | "file">("mic");
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
-  const [audioFileUrl, setAudioFileUrl] = useState<string | null>(null);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioFileName, setAudioFileName] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
@@ -53,7 +53,7 @@ export default function DjPanelPage() {
   const [error, setError] = useState("");
 
   const streamRef = useRef<MediaStream | null>(null);
-  const fileAudioElRef = useRef<HTMLAudioElement | null>(null);
+  const bufferSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const pendingCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
   const signalChannelRef = useRef<ReturnType<NonNullable<typeof supabase>["channel"]> | null>(null);
@@ -94,11 +94,14 @@ export default function DjPanelPage() {
       cancelAnimationFrame(meterAnimRef.current);
       meterAnimRef.current = null;
     }
-    if (fileAudioElRef.current) {
-      fileAudioElRef.current.pause();
-      fileAudioElRef.current.src = "";
-      fileAudioElRef.current = null;
+    try {
+      bufferSourceRef.current?.stop();
+      bufferSourceRef.current?.disconnect();
+    } catch {
+      // ignore
     }
+    bufferSourceRef.current = null;
+
     relayEnabledRef.current = false;
     try {
       relayNodeRef.current?.disconnect();
@@ -162,9 +165,7 @@ export default function DjPanelPage() {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (audioFileUrl) URL.revokeObjectURL(audioFileUrl);
-    const url = URL.createObjectURL(file);
-    setAudioFileUrl(url);
+    setAudioFile(file);
     setAudioFileName(file.name);
     setError("");
   }
@@ -184,24 +185,25 @@ export default function DjPanelPage() {
       if (ctx.state === "suspended") await ctx.resume();
 
       if (sourceMode === "file") {
-        if (!audioFileUrl) {
+        if (!audioFile) {
           setError("Selecciona primero un archivo MP3 o WAV para transmitir.");
           ctx.close().catch(() => {});
           audioCtxRef.current = null;
           return;
         }
-        const el = new Audio(audioFileUrl);
-        el.loop = true;
-        el.crossOrigin = "anonymous";
-        fileAudioElRef.current = el;
-        await el.play();
+        const arrayBuf = await audioFile.arrayBuffer();
+        const decoded = await ctx.decodeAudioData(arrayBuf);
+        const bufferSource = ctx.createBufferSource();
+        bufferSource.buffer = decoded;
+        bufferSource.loop = true;
+        bufferSourceRef.current = bufferSource;
 
-        const mediaSource = ctx.createMediaElementSource(el);
         const dest = ctx.createMediaStreamDestination();
-        mediaSource.connect(dest);
-        mediaSource.connect(ctx.destination);
+        bufferSource.connect(dest);
+        bufferSource.connect(ctx.destination);
+        bufferSource.start(0);
         stream = dest.stream;
-        sourceNode = mediaSource;
+        sourceNode = bufferSource;
       } else {
         stream = await navigator.mediaDevices.getUserMedia({
           audio: {

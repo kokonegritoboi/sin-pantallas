@@ -25,6 +25,9 @@ import {
 } from "@/lib/supabase";
 import { ICE_SERVERS, SignalMessage } from "@/lib/webrtc";
 
+const SILENT_WAV =
+  "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+
 function formatClock(totalSeconds: number) {
   const mins = Math.floor(totalSeconds / 60);
   const secs = totalSeconds % 60;
@@ -336,6 +339,11 @@ function PistaContent() {
       });
     };
 
+    const scheduleRelayFallback = () => {
+      if (relayTimer) clearTimeout(relayTimer);
+      relayTimer = setTimeout(requestRelay, 2500);
+    };
+
     const playRelayChunk = (sampleRate: number, pcm16B64: string) => {
       if (
         webrtcConnectedRef.current ||
@@ -386,17 +394,22 @@ function PistaContent() {
         if (audioRef.current) {
           audioRef.current.srcObject = remoteStream;
           audioRef.current.muted = mutedRef.current;
-          audioRef.current.play().catch(() => {});
+          audioRef.current.play().catch(() => {
+            webrtcConnectedRef.current = false;
+            requestRelay();
+          });
         }
-        webrtcConnectedRef.current = true;
-        if (relayTimer) clearTimeout(relayTimer);
-        stopBackupBeat();
-        stopRelayAudio();
-        setDjStatus("conectado");
       };
 
       pc.oniceconnectionstatechange = () => {
-        if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "disconnected") {
+        const st = pc.iceConnectionState;
+        if (st === "connected" || st === "completed") {
+          webrtcConnectedRef.current = true;
+          if (relayTimer) clearTimeout(relayTimer);
+          stopBackupBeat();
+          stopRelayAudio();
+          setDjStatus("conectado");
+        } else if (st === "failed" || st === "disconnected" || st === "closed") {
           webrtcConnectedRef.current = false;
           requestRelay();
         }
@@ -430,8 +443,7 @@ function PistaContent() {
             event: "signal",
             payload: { type: "listener-join", listenerId } satisfies SignalMessage,
           });
-          if (relayTimer) clearTimeout(relayTimer);
-          relayTimer = setTimeout(requestRelay, 3500);
+          scheduleRelayFallback();
         } else if (msg.type === "offer" && msg.listenerId === listenerId) {
           const pc = setupPeer();
           await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
@@ -478,7 +490,7 @@ function PistaContent() {
             event: "signal",
             payload: { type: "listener-join", listenerId } satisfies SignalMessage,
           });
-          relayTimer = setTimeout(requestRelay, 3500);
+          scheduleRelayFallback();
         }
       });
 
@@ -494,6 +506,7 @@ function PistaContent() {
   async function handleUnlockAudio() {
     setAudioUnlocked(true);
     if (audioRef.current) {
+      audioRef.current.src = SILENT_WAV;
       audioRef.current.muted = muted;
       audioRef.current.play().catch(() => {});
     }
