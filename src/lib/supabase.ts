@@ -26,13 +26,33 @@ export interface SesionSinPantallas {
   updated_at: string;
 }
 
+export const FOLIO_TTL_MS = 30 * 60 * 1000; // 30 minutos
+
+export function getCutoffIso(): string {
+  return new Date(Date.now() - FOLIO_TTL_MS).toISOString();
+}
+
+export function isSessionExpired(
+  sesion: Pick<SesionSinPantallas, "updated_at" | "created_at">
+): boolean {
+  const refTime = new Date(sesion.updated_at || sesion.created_at).getTime();
+  if (Number.isNaN(refTime)) return false;
+  return Date.now() - refTime > FOLIO_TTL_MS;
+}
+
 const LOCAL_KEY = "sp_sesiones_local_v1";
 
 export function listLocalSessions(): SesionSinPantallas[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(LOCAL_KEY);
-    return raw ? (JSON.parse(raw) as SesionSinPantallas[]) : [];
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as SesionSinPantallas[];
+    const active = parsed.filter((s) => !isSessionExpired(s));
+    if (active.length !== parsed.length) {
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(active));
+    }
+    return active;
   } catch {
     return [];
   }
@@ -64,4 +84,17 @@ export function updateLocalSession(
   const updated = { ...current, ...patch, updated_at: new Date().toISOString() };
   saveLocalSession(updated);
   return updated;
+}
+
+export async function purgeExpiredSessions(): Promise<void> {
+  listLocalSessions();
+  if (!supabase) return;
+  try {
+    await supabase
+      .from("sesiones_sin_pantallas")
+      .delete()
+      .lt("updated_at", getCutoffIso());
+  } catch {
+    // Si RLS aún no tiene política de delete, el filtro por updated_at en lecturas sigue aplicando
+  }
 }

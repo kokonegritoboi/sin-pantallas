@@ -26,3 +26,6 @@ create policy "Acceso insercion prototipo" on public.sesiones_sin_pantallas
 
 create policy "Acceso actualizacion prototipo" on public.sesiones_sin_pantallas
   for update using (true);
+
+create policy "Acceso eliminacion prototipo" on public.sesiones_sin_pantallas
+  for delete using (true);

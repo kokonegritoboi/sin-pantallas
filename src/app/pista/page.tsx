@@ -19,6 +19,9 @@ import {
   SesionSinPantallas,
   getLocalSession,
   updateLocalSession,
+  isSessionExpired,
+  purgeExpiredSessions,
+  getCutoffIso,
 } from "@/lib/supabase";
 import { ICE_SERVERS, SignalMessage } from "@/lib/webrtc";
 
@@ -26,6 +29,20 @@ function formatClock(totalSeconds: number) {
   const mins = Math.floor(totalSeconds / 60);
   const secs = totalSeconds % 60;
   return `${String(mins).padStart(2, "0")} : ${String(secs).padStart(2, "0")}`;
+}
+
+function base64Pcm16ToFloat32(b64: string): Float32Array {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  const pcm = new Int16Array(bytes.buffer);
+  const out = new Float32Array(pcm.length);
+  for (let i = 0; i < pcm.length; i++) {
+    out[i] = pcm[i] / 32768;
+  }
+  return out;
 }
 
 function PistaContent() {
@@ -45,10 +62,30 @@ function PistaContent() {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
+  const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const listenerIdRef = useRef<string>(`L-${Math.random().toString(36).slice(2, 9)}`);
   const backupIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const relayCtxRef = useRef<AudioContext | null>(null);
+  const nextRelayTimeRef = useRef<number>(0);
+  const webrtcConnectedRef = useRef(false);
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
+
+  const mutedRef = useRef(muted);
+  const audioUnlockedRef = useRef(audioUnlocked);
+  const sesionRef = useRef(sesion);
+
+  useEffect(() => {
+    mutedRef.current = muted;
+  }, [muted]);
+
+  useEffect(() => {
+    audioUnlockedRef.current = audioUnlocked;
+  }, [audioUnlocked]);
+
+  useEffect(() => {
+    sesionRef.current = sesion;
+  }, [sesion]);
 
   const stopBackupBeat = useCallback(() => {
     if (backupIntervalRef.current) {
@@ -61,8 +98,27 @@ function PistaContent() {
     }
   }, []);
 
+  const stopRelayAudio = useCallback(() => {
+    nextRelayTimeRef.current = 0;
+    if (relayCtxRef.current) {
+      relayCtxRef.current.close().catch(() => {});
+      relayCtxRef.current = null;
+    }
+  }, []);
+
+  const stopAllAudio = useCallback(() => {
+    stopBackupBeat();
+    stopRelayAudio();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.srcObject = null;
+      audioRef.current.removeAttribute("src");
+    }
+    webrtcConnectedRef.current = false;
+  }, [stopBackupBeat, stopRelayAudio]);
+
   const startBackupBeat = useCallback(() => {
-    if (backupIntervalRef.current) return;
+    if (backupIntervalRef.current || audioCtxRef.current) return;
     const AudioContextClass =
       window.AudioContext ||
       (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -109,15 +165,28 @@ function PistaContent() {
     backupIntervalRef.current = setInterval(playStep, 250);
   }, []);
 
+  // Limpieza garantizada si el usuario sale al menú o cierra la vista
+  useEffect(() => {
+    return () => {
+      stopAllAudio();
+      pcRef.current?.close();
+      pcRef.current = null;
+      wakeLockRef.current?.release().catch(() => {});
+      wakeLockRef.current = null;
+    };
+  }, [stopAllAudio]);
+
   useEffect(() => {
     if (!sessionId) {
       setLoading(false);
       return;
     }
 
+    purgeExpiredSessions();
+
     if (!supabase || sessionId.startsWith("loc-")) {
       const local = getLocalSession(sessionId);
-      if (local) {
+      if (local && !isSessionExpired(local)) {
         setSesion(local);
         setSeconds(local.tiempo_activo_seg);
       }
@@ -129,6 +198,7 @@ function PistaContent() {
       .from("sesiones_sin_pantallas")
       .select("*")
       .eq("id", sessionId)
+      .gte("updated_at", getCutoffIso())
       .single()
       .then(({ data }) => {
         if (data) {
@@ -152,12 +222,18 @@ function PistaContent() {
         (payload) => {
           const updated = payload.new as SesionSinPantallas;
           setSesion(updated);
-          if (updated.estado === "activo" && audioUnlocked) {
+          if (updated.estado === "activo" && audioUnlockedRef.current) {
             audioRef.current?.play().catch(() => {});
+            if (relayCtxRef.current?.state === "suspended") {
+              relayCtxRef.current.resume().catch(() => {});
+            }
           }
           if (updated.estado === "bloqueado") {
             audioRef.current?.pause();
             stopBackupBeat();
+            if (relayCtxRef.current?.state === "running") {
+              relayCtxRef.current.suspend().catch(() => {});
+            }
           }
         }
       )
@@ -166,7 +242,7 @@ function PistaContent() {
     return () => {
       supabase?.removeChannel(dbChannel);
     };
-  }, [sessionId, audioUnlocked, stopBackupBeat]);
+  }, [sessionId, stopBackupBeat]);
 
   useEffect(() => {
     if (!sesion || sesion.estado !== "activo" || !audioUnlocked) return;
@@ -199,6 +275,9 @@ function PistaContent() {
       if (document.hidden && sesion.estado === "activo") {
         audioRef.current?.pause();
         stopBackupBeat();
+        if (relayCtxRef.current?.state === "running") {
+          relayCtxRef.current.suspend().catch(() => {});
+        }
         const nuevasFaltas = sesion.faltas + 1;
 
         setSesion((prev) =>
@@ -234,27 +313,93 @@ function PistaContent() {
       if (audioUnlocked && sesion && sesion.estado === "activo") {
         if (sesion.canal === "CANAL-BACKUP" || !supabase) {
           setDjStatus("backup");
-          if (!muted) startBackupBeat();
+          if (!mutedRef.current) startBackupBeat();
         }
       }
-      return;
+      return () => {
+        stopBackupBeat();
+      };
     }
 
-    const roomName = `webrtc-sp-${sesion.codigo_evento}`;
-    const signalChannel = supabase.channel(roomName);
+    const roomName = `webrtc-sp-${sesion.codigo_evento.trim().toUpperCase()}`;
+    const signalChannel = supabase.channel(roomName, {
+      config: { broadcast: { self: false } },
+    });
     const listenerId = listenerIdRef.current;
+    let relayTimer: NodeJS.Timeout | null = null;
+
+    const requestRelay = () => {
+      if (webrtcConnectedRef.current) return;
+      signalChannel.send({
+        type: "broadcast",
+        event: "signal",
+        payload: { type: "need-relay", listenerId } satisfies SignalMessage,
+      });
+    };
+
+    const playRelayChunk = (sampleRate: number, pcm16B64: string) => {
+      if (
+        webrtcConnectedRef.current ||
+        mutedRef.current ||
+        sesionRef.current?.estado !== "activo"
+      ) {
+        return;
+      }
+
+      const AudioContextClass =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextClass) return;
+
+      if (!relayCtxRef.current) {
+        relayCtxRef.current = new AudioContextClass();
+      }
+      const ctx = relayCtxRef.current;
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+
+      const samples = base64Pcm16ToFloat32(pcm16B64);
+      const buffer = ctx.createBuffer(1, samples.length, sampleRate);
+      buffer.copyToChannel(samples, 0);
+
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(ctx.destination);
+
+      const now = ctx.currentTime;
+      if (nextRelayTimeRef.current < now) {
+        nextRelayTimeRef.current = now + 0.04;
+      }
+      src.start(nextRelayTimeRef.current);
+      nextRelayTimeRef.current += buffer.duration;
+
+      stopBackupBeat();
+      setDjStatus("conectado");
+    };
 
     const setupPeer = () => {
       pcRef.current?.close();
+      pendingCandidatesRef.current = [];
       const pc = new RTCPeerConnection(ICE_SERVERS);
       pcRef.current = pc;
 
       pc.ontrack = (event) => {
-        if (audioRef.current && event.streams[0]) {
-          audioRef.current.srcObject = event.streams[0];
+        const remoteStream = event.streams[0] || new MediaStream([event.track]);
+        if (audioRef.current) {
+          audioRef.current.srcObject = remoteStream;
+          audioRef.current.muted = mutedRef.current;
           audioRef.current.play().catch(() => {});
-          stopBackupBeat();
-          setDjStatus("conectado");
+        }
+        webrtcConnectedRef.current = true;
+        if (relayTimer) clearTimeout(relayTimer);
+        stopBackupBeat();
+        stopRelayAudio();
+        setDjStatus("conectado");
+      };
+
+      pc.oniceconnectionstatechange = () => {
+        if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "disconnected") {
+          webrtcConnectedRef.current = false;
+          requestRelay();
         }
       };
 
@@ -280,29 +425,50 @@ function PistaContent() {
       .on("broadcast", { event: "signal" }, async ({ payload }) => {
         const msg = payload as SignalMessage;
         if (msg.type === "dj-ready") {
+          webrtcConnectedRef.current = false;
           signalChannel.send({
             type: "broadcast",
             event: "signal",
             payload: { type: "listener-join", listenerId } satisfies SignalMessage,
           });
+          if (relayTimer) clearTimeout(relayTimer);
+          relayTimer = setTimeout(requestRelay, 3500);
         } else if (msg.type === "offer" && msg.listenerId === listenerId) {
           const pc = setupPeer();
           await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+          const queued = pendingCandidatesRef.current;
+          pendingCandidatesRef.current = [];
+          for (const cand of queued) {
+            await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+          }
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           signalChannel.send({
             type: "broadcast",
             event: "signal",
-            payload: { type: "answer", listenerId, sdp: answer } satisfies SignalMessage,
+            payload: {
+              type: "answer",
+              listenerId,
+              sdp: { type: answer.type, sdp: answer.sdp },
+            } satisfies SignalMessage,
           });
         } else if (
           msg.type === "ice-candidate" &&
           msg.listenerId === listenerId &&
-          msg.from === "dj" &&
-          pcRef.current
+          msg.from === "dj"
         ) {
-          await pcRef.current.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(() => {});
+          if (pcRef.current && pcRef.current.remoteDescription) {
+            await pcRef.current
+              .addIceCandidate(new RTCIceCandidate(msg.candidate))
+              .catch(() => {});
+          } else {
+            pendingCandidatesRef.current.push(msg.candidate);
+          }
+        } else if (msg.type === "relay-audio") {
+          playRelayChunk(msg.sampleRate, msg.pcm16);
         } else if (msg.type === "dj-stop") {
+          webrtcConnectedRef.current = false;
+          stopRelayAudio();
           setDjStatus("esperando");
         }
       })
@@ -313,21 +479,36 @@ function PistaContent() {
             event: "signal",
             payload: { type: "listener-join", listenerId } satisfies SignalMessage,
           });
+          relayTimer = setTimeout(requestRelay, 3500);
         }
       });
 
     return () => {
+      if (relayTimer) clearTimeout(relayTimer);
       pcRef.current?.close();
+      pcRef.current = null;
       supabase?.removeChannel(signalChannel);
-      stopBackupBeat();
+      stopAllAudio();
     };
-  }, [audioUnlocked, sesion?.codigo_evento, sesion?.canal, muted, startBackupBeat, stopBackupBeat]);
+  }, [audioUnlocked, sesion?.codigo_evento, sesion?.canal, startBackupBeat, stopBackupBeat, stopRelayAudio, stopAllAudio]);
 
   async function handleUnlockAudio() {
     setAudioUnlocked(true);
     if (audioRef.current) {
       audioRef.current.muted = muted;
       audioRef.current.play().catch(() => {});
+    }
+    try {
+      const AudioContextClass =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (AudioContextClass && !relayCtxRef.current) {
+        const ctx = new AudioContextClass();
+        if (ctx.state === "suspended") await ctx.resume();
+        relayCtxRef.current = ctx;
+      }
+    } catch {
+      // Opcional
     }
     try {
       const nav = navigator as Navigator & {
@@ -347,8 +528,16 @@ function PistaContent() {
     if (audioRef.current) audioRef.current.muted = next;
     if (next) {
       stopBackupBeat();
-    } else if (djStatus === "backup" && sesion?.estado === "activo") {
-      startBackupBeat();
+      if (relayCtxRef.current?.state === "running") {
+        relayCtxRef.current.suspend().catch(() => {});
+      }
+    } else {
+      if (relayCtxRef.current?.state === "suspended") {
+        relayCtxRef.current.resume().catch(() => {});
+      }
+      if (djStatus === "backup" && sesion?.estado === "activo") {
+        startBackupBeat();
+      }
     }
   }
 
@@ -370,7 +559,9 @@ function PistaContent() {
   }
 
   async function handleFinish() {
-    stopBackupBeat();
+    stopAllAudio();
+    pcRef.current?.close();
+    pcRef.current = null;
     wakeLockRef.current?.release().catch(() => {});
     if (sesion) {
       if (supabase && !sesion.id.startsWith("loc-")) {
@@ -398,7 +589,7 @@ function PistaContent() {
   if (!sesion) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
-        <p className="text-sm text-zinc-300">No hay una sesión activa registrada.</p>
+        <p className="text-sm text-zinc-300">No hay una sesión activa registrada o tu folio expiró.</p>
         <Link
           href="/"
           className="inline-flex items-center gap-2 rounded-full bg-[#C9F72D] px-5 py-3 text-sm font-extrabold text-[#0b0d10]"

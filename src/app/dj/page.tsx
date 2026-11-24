@@ -18,8 +18,27 @@ import {
   SesionSinPantallas,
   listLocalSessions,
   updateLocalSession,
+  purgeExpiredSessions,
+  getCutoffIso,
 } from "@/lib/supabase";
 import { ICE_SERVERS, SignalMessage } from "@/lib/webrtc";
+
+function floatToPcm16Base64(input: Float32Array, inRate: number, outRate: number): string {
+  const ratio = inRate / outRate;
+  const outLen = Math.max(1, Math.floor(input.length / ratio));
+  const pcm = new Int16Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const idx = Math.min(input.length - 1, Math.floor(i * ratio));
+    const s = Math.max(-1, Math.min(1, input[idx]));
+    pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  const bytes = new Uint8Array(pcm.buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
 
 export default function DjPanelPage() {
   const [codigoEvento, setCodigoEvento] = useState("BERLIN-UTVAM");
@@ -34,11 +53,15 @@ export default function DjPanelPage() {
   const [error, setError] = useState("");
 
   const streamRef = useRef<MediaStream | null>(null);
-  const audioElRef = useRef<HTMLAudioElement | null>(null);
+  const fileAudioElRef = useRef<HTMLAudioElement | null>(null);
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const pendingCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
   const signalChannelRef = useRef<ReturnType<NonNullable<typeof supabase>["channel"]> | null>(null);
   const meterAnimRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const relayNodeRef = useRef<ScriptProcessorNode | null>(null);
+  const relayGainRef = useRef<GainNode | null>(null);
+  const relayEnabledRef = useRef(false);
 
   async function loadAudioInputs() {
     try {
@@ -52,6 +75,7 @@ export default function DjPanelPage() {
   }
 
   async function fetchSesiones() {
+    await purgeExpiredSessions();
     if (!supabase) {
       setSesiones(listLocalSessions());
       return;
@@ -59,29 +83,79 @@ export default function DjPanelPage() {
     const { data } = await supabase
       .from("sesiones_sin_pantallas")
       .select("*")
+      .gte("updated_at", getCutoffIso())
       .order("created_at", { ascending: false })
-      .limit(20);
+      .limit(30);
     if (data) setSesiones(data as SesionSinPantallas[]);
+  }
+
+  function cleanupBroadcast() {
+    if (meterAnimRef.current) {
+      cancelAnimationFrame(meterAnimRef.current);
+      meterAnimRef.current = null;
+    }
+    if (fileAudioElRef.current) {
+      fileAudioElRef.current.pause();
+      fileAudioElRef.current.src = "";
+      fileAudioElRef.current = null;
+    }
+    relayEnabledRef.current = false;
+    try {
+      relayNodeRef.current?.disconnect();
+      relayGainRef.current?.disconnect();
+    } catch {
+      // ignore
+    }
+    relayNodeRef.current = null;
+    relayGainRef.current = null;
+
+    signalChannelRef.current?.send({
+      type: "broadcast",
+      event: "signal",
+      payload: { type: "dj-stop" } satisfies SignalMessage,
+    });
+    if (signalChannelRef.current && supabase) {
+      supabase.removeChannel(signalChannelRef.current);
+    }
+    signalChannelRef.current = null;
+
+    peersRef.current.forEach((pc) => pc.close());
+    peersRef.current.clear();
+    pendingCandidatesRef.current.clear();
+
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+
+    audioCtxRef.current?.close().catch(() => {});
+    audioCtxRef.current = null;
   }
 
   useEffect(() => {
     loadAudioInputs();
     fetchSesiones();
 
-    if (!supabase) return;
-    const dbSub = supabase
-      .channel("panel-organizador")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "sesiones_sin_pantallas" },
-        () => {
-          fetchSesiones();
-        }
-      )
-      .subscribe();
+    const purgeInterval = setInterval(() => {
+      fetchSesiones();
+    }, 60000);
+
+    let dbSub: ReturnType<NonNullable<typeof supabase>["channel"]> | null = null;
+    if (supabase) {
+      dbSub = supabase
+        .channel("panel-organizador")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "sesiones_sin_pantallas" },
+          () => {
+            fetchSesiones();
+          }
+        )
+        .subscribe();
+    }
 
     return () => {
-      supabase?.removeChannel(dbSub);
+      clearInterval(purgeInterval);
+      if (dbSub && supabase) supabase.removeChannel(dbSub);
+      cleanupBroadcast();
     };
   }, []);
 
@@ -97,9 +171,11 @@ export default function DjPanelPage() {
 
   async function startBroadcast() {
     setError("");
+    cleanupBroadcast();
 
     try {
       let stream: MediaStream;
+      let sourceNode: AudioNode;
       const AudioContextClass =
         window.AudioContext ||
         (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -108,31 +184,24 @@ export default function DjPanelPage() {
       if (ctx.state === "suspended") await ctx.resume();
 
       if (sourceMode === "file") {
-        if (!audioFileUrl || !audioElRef.current) {
+        if (!audioFileUrl) {
           setError("Selecciona primero un archivo MP3 o WAV para transmitir.");
+          ctx.close().catch(() => {});
+          audioCtxRef.current = null;
           return;
         }
-        audioElRef.current.src = audioFileUrl;
-        audioElRef.current.loop = true;
-        await audioElRef.current.play();
+        const el = new Audio(audioFileUrl);
+        el.loop = true;
+        el.crossOrigin = "anonymous";
+        fileAudioElRef.current = el;
+        await el.play();
 
-        const mediaSource = ctx.createMediaElementSource(audioElRef.current);
+        const mediaSource = ctx.createMediaElementSource(el);
         const dest = ctx.createMediaStreamDestination();
         mediaSource.connect(dest);
         mediaSource.connect(ctx.destination);
         stream = dest.stream;
-
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 64;
-        mediaSource.connect(analyser);
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        const updateMeter = () => {
-          analyser.getByteFrequencyData(dataArray);
-          const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-          setAudioLevel(Math.min(100, Math.round((avg / 128) * 100)));
-          meterAnimRef.current = requestAnimationFrame(updateMeter);
-        };
-        updateMeter();
+        sourceNode = mediaSource;
       } else {
         stream = await navigator.mediaDevices.getUserMedia({
           audio: {
@@ -143,30 +212,58 @@ export default function DjPanelPage() {
           },
         });
         await loadAudioInputs();
-
-        const source = ctx.createMediaStreamSource(stream);
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 64;
-        source.connect(analyser);
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        const updateMeter = () => {
-          analyser.getByteFrequencyData(dataArray);
-          const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-          setAudioLevel(Math.min(100, Math.round((avg / 128) * 100)));
-          meterAnimRef.current = requestAnimationFrame(updateMeter);
-        };
-        updateMeter();
+        sourceNode = ctx.createMediaStreamSource(stream);
       }
+
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 64;
+      sourceNode.connect(analyser);
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const updateMeter = () => {
+        analyser.getByteFrequencyData(dataArray);
+        const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+        setAudioLevel(Math.min(100, Math.round((avg / 128) * 100)));
+        meterAnimRef.current = requestAnimationFrame(updateMeter);
+      };
+      updateMeter();
 
       streamRef.current = stream;
 
       if (isSupabaseConfigured && supabase) {
         const roomName = `webrtc-sp-${codigoEvento.trim().toUpperCase()}`;
-        const channel = supabase.channel(roomName);
+        const channel = supabase.channel(roomName, {
+          config: { broadcast: { self: false } },
+        });
         signalChannelRef.current = channel;
+
+        // Nodo de respaldo por Broadcast PCM16 para redes donde WebRTC P2P no logre atravesar NAT
+        const processor = ctx.createScriptProcessor(4096, 1, 1);
+        const silentGain = ctx.createGain();
+        silentGain.gain.value = 0;
+        sourceNode.connect(processor);
+        processor.connect(silentGain);
+        silentGain.connect(ctx.destination);
+        relayNodeRef.current = processor;
+        relayGainRef.current = silentGain;
+
+        processor.onaudioprocess = (ev) => {
+          if (!relayEnabledRef.current) return;
+          const input = ev.inputBuffer.getChannelData(0);
+          const pcm16 = floatToPcm16Base64(input, ctx.sampleRate, 16000);
+          channel.send({
+            type: "broadcast",
+            event: "signal",
+            payload: {
+              type: "relay-audio",
+              sampleRate: 16000,
+              pcm16,
+            } satisfies SignalMessage,
+          });
+        };
 
         const connectToListener = async (listenerId: string) => {
           peersRef.current.get(listenerId)?.close();
+          pendingCandidatesRef.current.set(listenerId, []);
           const pc = new RTCPeerConnection(ICE_SERVERS);
           peersRef.current.set(listenerId, pc);
 
@@ -192,7 +289,11 @@ export default function DjPanelPage() {
           channel.send({
             type: "broadcast",
             event: "signal",
-            payload: { type: "offer", listenerId, sdp: offer } satisfies SignalMessage,
+            payload: {
+              type: "offer",
+              listenerId,
+              sdp: { type: offer.type, sdp: offer.sdp },
+            } satisfies SignalMessage,
           });
         };
 
@@ -201,12 +302,27 @@ export default function DjPanelPage() {
             const msg = payload as SignalMessage;
             if (msg.type === "listener-join") {
               await connectToListener(msg.listenerId);
+            } else if (msg.type === "need-relay") {
+              relayEnabledRef.current = true;
             } else if (msg.type === "answer") {
               const pc = peersRef.current.get(msg.listenerId);
-              if (pc) await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+              if (pc) {
+                await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+                const queued = pendingCandidatesRef.current.get(msg.listenerId) || [];
+                pendingCandidatesRef.current.set(msg.listenerId, []);
+                for (const cand of queued) {
+                  await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+                }
+              }
             } else if (msg.type === "ice-candidate" && msg.from === "listener") {
               const pc = peersRef.current.get(msg.listenerId);
-              if (pc) await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(() => {});
+              if (pc && pc.remoteDescription) {
+                await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(() => {});
+              } else {
+                const list = pendingCandidatesRef.current.get(msg.listenerId) || [];
+                list.push(msg.candidate);
+                pendingCandidatesRef.current.set(msg.listenerId, list);
+              }
             }
           })
           .subscribe((status) => {
@@ -222,6 +338,7 @@ export default function DjPanelPage() {
 
       setIsStreaming(true);
     } catch (err) {
+      cleanupBroadcast();
       setError(
         err instanceof Error
           ? `No se pudo iniciar el audio: ${err.message}`
@@ -231,22 +348,7 @@ export default function DjPanelPage() {
   }
 
   function stopBroadcast() {
-    if (meterAnimRef.current) cancelAnimationFrame(meterAnimRef.current);
-    audioElRef.current?.pause();
-    signalChannelRef.current?.send({
-      type: "broadcast",
-      event: "signal",
-      payload: { type: "dj-stop" } satisfies SignalMessage,
-    });
-    if (signalChannelRef.current && supabase) {
-      supabase.removeChannel(signalChannelRef.current);
-    }
-    peersRef.current.forEach((pc) => pc.close());
-    peersRef.current.clear();
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    audioCtxRef.current?.close().catch(() => {});
-    audioCtxRef.current = null;
+    cleanupBroadcast();
     setAudioLevel(0);
     setIsStreaming(false);
   }
@@ -266,8 +368,6 @@ export default function DjPanelPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <audio ref={audioElRef} className="hidden" />
-
       <header className="flex items-center justify-between">
         <Link
           href="/"
@@ -377,7 +477,7 @@ export default function DjPanelPage() {
                 <div className="flex justify-between text-[11px] font-semibold text-zinc-400">
                   <span>
                     {isSupabaseConfigured
-                      ? "Transmitiendo en vivo (WebRTC)"
+                      ? "Transmitiendo en vivo (WebRTC + Relay)"
                       : "Cabina activa en modo local"}
                   </span>
                   <span className="tabular-nums text-[#C9F72D]">{audioLevel}%</span>

@@ -9,6 +9,9 @@ import {
   SesionSinPantallas,
   getLocalSession,
   getLocalSessionByFolio,
+  isSessionExpired,
+  purgeExpiredSessions,
+  getCutoffIso,
 } from "@/lib/supabase";
 
 function formatTime(totalSeconds: number) {
@@ -26,6 +29,7 @@ function FolioContent() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    purgeExpiredSessions();
     if (!idParam) {
       setLoading(false);
       return;
@@ -33,8 +37,8 @@ function FolioContent() {
 
     if (!supabase || idParam.startsWith("loc-")) {
       const local = getLocalSession(idParam);
-      if (local) setSesion(local);
-      else setError("No encontramos ese registro local.");
+      if (local && !isSessionExpired(local)) setSesion(local);
+      else setError("Este folio no existe o expiró después de 30 minutos.");
       setLoading(false);
       return;
     }
@@ -43,10 +47,11 @@ function FolioContent() {
       .from("sesiones_sin_pantallas")
       .select("*")
       .eq("id", idParam)
+      .gte("updated_at", getCutoffIso())
       .single()
       .then(({ data, error: err }) => {
         if (err || !data) {
-          setError("No encontramos ese registro en la base de datos.");
+          setError("Este folio no existe o expiró después de 30 minutos.");
         } else {
           setSesion(data as SesionSinPantallas);
         }
@@ -59,13 +64,14 @@ function FolioContent() {
     if (!folioQuery.trim()) return;
     setLoading(true);
     setError("");
+    await purgeExpiredSessions();
 
     if (!supabase) {
       const local = getLocalSessionByFolio(folioQuery.trim());
-      if (local) setSesion(local);
+      if (local && !isSessionExpired(local)) setSesion(local);
       else {
         setSesion(null);
-        setError("No existe un folio local con ese código.");
+        setError("No existe un folio activo con ese código (expiran tras 30 minutos).");
       }
       setLoading(false);
       return;
@@ -75,13 +81,14 @@ function FolioContent() {
       .from("sesiones_sin_pantallas")
       .select("*")
       .eq("folio", folioQuery.trim().toUpperCase())
+      .gte("updated_at", getCutoffIso())
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (err || !data) {
       setSesion(null);
-      setError("No existe un folio con ese código.");
+      setError("No existe un folio activo con ese código (expiran tras 30 minutos).");
     } else {
       setSesion(data as SesionSinPantallas);
     }
